@@ -11,7 +11,7 @@ spec:
           containers:
             - name: backup-ctr
               # Replace the image below with your built/pushed image:
-              image: ghcr.io/your-org/backup:latest
+              image: ghostops-backup:latest
               # If your script needs env vars, add them here or mount secrets.
               command: ["/bin/bash", "/app/backup.sh"]
           restartPolicy: OnFailure

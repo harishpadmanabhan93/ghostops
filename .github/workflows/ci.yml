@@ -1,0 +1,108 @@
+name: GhostOps CI
+
+# Run on PRs (recommended) and manually
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  GENERATOR: generator/parser.py
+  LEGACY_SAMPLE: samples/legacy/backup.sh
+  OUT_DIR: out
+
+jobs:
+  generate-and-test:
+    name: Generate scaffold & run smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Ensure generator is executable
+        run: |
+          chmod +x $GENERATOR || true
+
+      - name: Create output dir (clean)
+        run: |
+          rm -rf $OUT_DIR || true
+          mkdir -p $OUT_DIR
+
+      - name: Run generator
+        id: generate
+        run: |
+          python3 $GENERATOR $LEGACY_SAMPLE $OUT_DIR
+
+      - name: List generated artifacts
+        run: |
+          echo "Out dir contents:"
+          ls -la $OUT_DIR
+          echo "K8s manifest:"
+          sed -n '1,200p' $OUT_DIR/k8s/cronjob.yaml || true
+
+      - name: Make smoke test executable
+        run: |
+          chmod +x $OUT_DIR/smoke-test.sh || true
+          chmod +x $OUT_DIR/$(basename $LEGACY_SAMPLE) || true
+
+      - name: Run smoke test (runs the generated script locally)
+        run: |
+          set -euxo pipefail
+          cd $OUT_DIR
+          ./smoke-test.sh
+
+  build-and-push:
+    name: Build & push Docker image (optional)
+    runs-on: ubuntu-latest
+    needs: generate-and-test
+    if: github.ref == 'refs/heads/main' && (secrets.DOCKERHUB_USERNAME || secrets.GITHUB_TOKEN || secrets.GHCR_TOKEN)
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Read generated image name from manifest
+        id: read-image
+        run: |
+          # Fallback image name if manifest uses placeholder
+          IMAGE_NAME_DEFAULT="ghostops-backup:latest"
+          # Try to parse image from generated YAML (k8s/cronjob.yaml)
+          IMAGE_NAME=$(sed -n '1,200p' out/k8s/cronjob.yaml | grep 'image:' | head -n1 | awk '{print $2}' || true)
+          if [ -z "$IMAGE_NAME" ]; then
+            IMAGE_NAME="$IMAGE_NAME_DEFAULT"
+          fi
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into Docker Hub (if secrets present)
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log into GitHub Container Registry (if GHCR token present)
+        if: ${{ secrets.GHCR_TOKEN }}
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE="${{ steps.read-image.outputs.IMAGE_NAME }}"
+          echo "Building image: $IMAGE"
+          docker build -t "$IMAGE" out/
+          # Push if logged in (best-effort)
+          if docker info | grep -q "Username:" || [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
+            docker push "$IMAGE" || echo "Push failed (maybe permissions)."
+          else
+            echo "No registry credentials configured; skipping push."
+          fi
+

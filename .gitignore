@@ -1,0 +1,21 @@
+# Ignore Node.js build outputs
+node_modules/
+dist/
+build/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore local environment files
+.env
+.vscode/
+.DS_Store
+
+# Ignore system & IDE temp files
+*.log
+.idea/
+
+# ⚠️ IMPORTANT: do NOT ignore /.kiro or subfolders
+# /.kiro MUST be included in repo per Kiroween rules.
+

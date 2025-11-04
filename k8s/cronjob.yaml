@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ghostops-sample
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: sample
+              image: alpine:3.17
+              command: ["/bin/sh", "-c", "echo hello"]
+          restartPolicy: OnFailure
+

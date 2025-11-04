@@ -1,0 +1,29 @@
+name: ghostops
+version: 0.1.0
+description: Generate Kubernetes-native services from legacy scripts and automate PR + deploy flows via Kiro hooks.
+inputs:
+  - name: legacy_code
+    type: text
+    description: Legacy shell script or configuration to migrate
+  - name: target_platform
+    type: enum
+    options: [kubernetes, docker-compose]
+    default: kubernetes
+outputs:
+  - name: scaffold_repo
+    type: git-repo
+workflows:
+  - id: generate_scaffold
+    description: Parse input and produce Dockerfile, app server, k8s manifests, and CI workflow
+    steps:
+      - parse_legacy
+      - create_dockerfile
+      - create_app
+      - create_k8s_manifests
+      - create_ci
+agent_hooks:
+  - name: on_pr_open
+    path: /.kiro/hooks/pr-creator.js
+  - name: on_deploy_request
+    path: /.kiro/hooks/deploy-hook.yaml
+

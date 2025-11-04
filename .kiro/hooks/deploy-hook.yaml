@@ -1,0 +1,13 @@
+# deploy-hook.yaml - invoked when user requests deploy from UI
+name: deploy-hook
+description: Simulate a deploy via MCP (mock connector) for demo purposes.
+inputs:
+  - name: target_namespace
+    type: string
+    default: demo
+  - name: manifest_path
+    type: string
+outputs:
+  - name: deploy_status
+    type: string
+
